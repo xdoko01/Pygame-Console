@@ -1,7 +1,16 @@
 # Tasks
- - [ ] Function that recalculates the whole output buffer after change of the resolution so that output texts are correctly wrapped also after the change
- - [ ] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
+
+## General
  - [ ] Update on pygame.org
+ 
+## For new release 0.1.1
+ - [x] Disable logging by default
+ - [ ] Function that recalculates the whole output buffer after change of the resolution so that output texts are correctly wrapped also after the change
+  - store original text in separate buffer
+  - on reinit, write the content of Original buffer using the write function to the buffer and set the buffer to 0 to show the latest rows
+ - [ ] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
+ - [x] Implement console command to change the resolution - `change_res`
+
 
 # Game-Console
 Full-featured game console based on pygame that can be integrated in your python game in order to execute python command/scripts/custom in-game functions

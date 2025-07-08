@@ -686,7 +686,7 @@ class TextOutput:
 
 		''' Buffer related parameters
 		'''
-		# Stores list of past texts
+		# Stores list of past texts - including the breaks according to the resolution
 		self.buffer = []
 		# Necessary for implemetation of scrolling in the output buffer (PgUp, PgDown)
 		self.buffer_offset = 0	

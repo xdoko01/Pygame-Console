@@ -22,10 +22,15 @@ class TestObject:
 
     def __init__(self, console_config_file):
 
+        # Init pygame
         pygame.init()
-        self.screen = pygame.display.set_mode((800, 600))
         self.clock = pygame.time.Clock()
 
+        # Init display
+        self.screen = None
+        self.init_display(res_x=800, res_y=600)
+        #self.screen = pygame.display.set_mode((800, 600))
+        
         self.pos = [0,0]
         self.exit = False
         self.surf = pygame.Surface((50, 50))
@@ -35,14 +40,20 @@ class TestObject:
             ********************************
         '''
         # Generate random console config (no parameter) or specify the layout by nums 1 to 6
-        console_config = self.get_console_config_json(console_config_file)
+        self.console_config = self.get_console_config_json(console_config_file)
 
         # Create console based on the config - feel free to implement custom code to read the config directly from json
-        self.console = Console(self, self.screen.get_width(), console_config)
+        self.console = Console(self, self.screen.get_width(), self.console_config)
         
         ''' Console integration code - END
             ********************************
         '''
+
+    def init_display(self, res_x: int, res_y: int, fullscreen: bool=False) -> None:
+        '''Init the display. Also called for change of the resolution.
+        '''
+        flags = pygame.FULLSCREEN if fullscreen else 0
+        self.screen = pygame.display.set_mode((res_x, res_y), flags)
 
     def update(self):
         while not self.exit:
