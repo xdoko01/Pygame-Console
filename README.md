@@ -1,19 +1,5 @@
-# Tasks
-
-## General
- - [ ] Update on pygame.org
- 
-## For new release 0.1.1
- - [x] Disable logging by default
- - [ ] Function that recalculates the whole output buffer after change of the resolution so that output texts are correctly wrapped also after the change
-  - store original text in separate buffer
-  - on reinit, write the content of Original buffer using the write function to the buffer and set the buffer to 0 to show the latest rows
- - [ ] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
- - [x] Implement console command to change the resolution - `change_res`
-
-
-# Game-Console
-Full-featured game console based on pygame that can be integrated in your python game in order to execute python command/scripts/custom in-game functions
+# PyGame-Console
+Full-featured game console based on pygame that can be integrated in your python game in order to execute python command/scripts/custom in-game functions.
 
 ![screenshot](docs/02_console01_start.png)
 
@@ -30,7 +16,7 @@ Full-featured game console based on pygame that can be integrated in your python
 * support for colored texts, big inputs, big outputs
 * easy integration into your existing code
 
-## Running the code
+## Running the Code
 All console logic is implemented in the `pgconsole` package. Example game with console implementation is in `examples/demo.py`.
 Folders `examples/commands`, `examples/scripts` and `examples/configs` contain configurable console logic tailored for given game. Those can be further modified/extended to implement more logic / commands / scripts into the console.
 
@@ -38,40 +24,40 @@ Make sure you have pygame >= 1.9.4 installed and run the code.
 
 * You will see pygame window with rectancle moving in random directions - simulation of game.
 
-* By pressing F1 button you can toggle on/off console.
+* By pressing `F1` button you can toggle on/off console.
 
 * By pressing `Esc` key or closing the window or typing `exit` will end the program.
 
-## How to use console features
+## How to Use Console Features
 
 ### Python Commands
-When instanciating Console class you need to specify reference to the main game class that you want to manage. Instance of this class is then referenced as `game`. Using console, you can then use standard python code with this instance. Python commands must start either with `shell` keyword or simple exclamation mark `!` !shell.
+When instanciating `Console` class you need to specify reference to the main game class that you want to manage. Instance of this class is then referenced as `game`. Using console, you can then use standard python code with this instance. Python commands must start either with `shell` keyword or simple exclamation mark `!`.
 
 Examples of couple python commands that can be used with the example game are below:
 
-* <code>shell print('Hello world')</code>     # Prints Hello world on console
-* <code>!print('Hello world')</code>      # Same as above
-* <code>!game</code>      # Prints <__main__.TestObject object at 0xXXXXXXXX> i.e. reference to the main object that is govern by the console
-* <code>!game.pos = [10,10]</code>      # Changes position of the game rectancle
-* <code>!game.surf.fill((0,0,0))</code>     # Changes the color of the game rectancle from white to black
-* <code>!game.console.padding.up = 30</code>      # Changes the space between upper console corner and first console element (header or other depending on console layout settings)
-* <code>!game.cons_get_time()</code>      # Prints output of the function on the console output.
-* <code>!1+1</code>      # Prints 2 on the output
-* <code>![a for a in range(10)]</code>      # Prints list of values from 0 to 9 on the output
-* <code>!import os</code>     # Prints 'invalid syntax'. Such python operations are not allowed from the console due to security reasons
+* <code>shell print('Hello world') //prints Hello world on console</code>
+* <code>!print('Hello world') //same as above</code>
+* <code>!game //crints <__main__.TestObject object at 0xXXXXXXXX> i.e. reference to the main object that is govern by the console</code>
+* <code>!game.pos = [10,10] //changes position of the game rectancle</code>
+* <code>!game.surf.fill((0,0,0)) //changes the color of the game rectancle from white to black</code>
+* <code>!game.console.padding.up = 30 //changes the space between upper console corner and first console element (header or other depending on console layout settings)</code>
+* <code>!game.cons_get_time() //prints output of the function on the console output</code>
+* <code>!1+1 //prints 2 on the output</code>
+* <code>![a for a in range(10)] //prints list of values from 0 to 9 on the output</code>      
+* <code>!import os //prints 'invalid syntax'. Such python operations are not allowed from the console due to security reasons</code>
 
 ![screenshot](docs/07_console01_cmd_py.png)
 
 ### Custom Commands
-With game-console you can specify your own commands. For implementing new command called for example <i>dummy</i> that takes one parameter and prints it on the console in the blue color, you need to perform following steps:
+With pygame-console you can specify your own commands. For implementing new command, e.g. <i>dummy</i> that takes one parameter and prints it on the console in the blue color, you need to perform following steps:
 
-* create a new python file `dummy.py` and place it to `examples/commands` package (or other package specified by the console `global` configuration that can be changed)
-* see the existing example python files in the `commands`package for reference. 
+* Create a new python file `dummy.py` and place it to `examples/commands` package (or other package specified by the console `global` configuration that can be changed).
+* See the existing example python files in the `commands`package for reference. 
   * The python file must contain `initialize` function (you can copy&paste it from example commmands). This function is called automatically when the command is first used. It manages registration of the command with the console.
-  * The python file must contain also other function (with any name) that implements the command and is passed `game_ctx` (reference to the game - same as when calling `!game`) and params (command parameters)
+  * The python file must contain also other function (with any name) that implements the command and is passed `game_ctx` (reference to the game - same as when calling `!game`) and params (command parameters).
 * It is good idea to return some value in case of failure. This is important if your custom command is part of some console script (read further).
 
-There are already several custom functions implemented in the example game <code>exit</code>, <code>move</code>, and <code>test</code>. The <code>move</code> function takes 2 parameters delimited and changes position of the main game rectancle. The <code>exit</code> command exists the game. The <code>list</code> command shows information about registered commands.
+There are already several custom functions implemented in the example game <code>exit</code>, <code>move</code>, <code>change_res</code>, and <code>test</code>. The <code>move</code> function takes 2 parameters delimited and changes position of the main game rectancle. The <code>exit</code> command exists the game. The <code>list</code> command shows information about registered commands.
 
 ![screenshot](docs/03_console01_cmd_input.png)
 
@@ -99,19 +85,19 @@ Console scripts also support parameters. See below the example using parameters 
 
 The body of the script using those parameters is then looking as follows:
 
-<code>
+```
 move $x $y
 !print('I have moved the brick named $name')
 !game.surf.fill((0, $color,0))
 !print('I have colored the brick with $color')
 !print("All done!")
-</code>
+```
 
 The parameters are represented as keys starting with `$` in the source of the console script.
 
 ![screenshot](docs/12_console01_cmd_script_params.png)
 
-### Dynamic information in header/footer
+### Dynamic Information in Header/Footer
 As mentioned above, header or footer can display dynamic data. Those data are gained as a resulf of calling of some function of the main game class. In the example game, you will see <i>time</i> and game object <i>position</i> as some of the examples of such dynamic values.
 
 If you want to have dynamic values in your console, you need to do the following:
@@ -121,8 +107,8 @@ If you want to have dynamic values in your console, you need to do the following
 
 ![screenshot](docs/11_dynamic_text_config.png)
 
-## Changing console layout/configuration
-A mentioned in the list of features, console enables heavy configuration. I suggest you to see example console configs in the `examples/configs` directory and get inspiration from 6 configurations that are predifined there - one for truetype font and one for bitmap font.
+## Changing Console Layout/Configuration
+As mentioned in the list of features, console enables heavy configuration. I suggest you to see example console configs in the `examples/configs` directory and get inspiration from 6 configurations that are predifined there - one for truetype font and one for bitmap font.
 Below you can see the pictures of those configurations in the game.
 
 ### Sample Layout 1
@@ -190,7 +176,7 @@ with TrueType font
 with Bitmap font
 ![screenshot](docs/ConsoleConf06b.png)
 
-## How to integrate console into the game
+## How to Integrate PyGame-Console into your Game
  
 * Install the Pygame-Console package using `pip` command
 ```bash
@@ -206,4 +192,19 @@ pip -m install pgconsole
  ![screenshot](docs/Integr01.png)
  ![screenshot](docs/Integr02.png)
 
- 
+
+## Changelog
+
+### Release 0.1.1
+ * Logging disabled by default
+ * Console output buffer is re-rendered after change of the resolution. The text is nicelly align in the new resolution.
+ * New console command facilitating change of the resolution - `change_res`.
+
+## Tasks
+
+## General
+ - [ ] Update on pygame.org
+
+## For Release 0.1.2
+ - [ ] Put buffer management into separate function, so the logic is not repeated.
+ - [ ] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.

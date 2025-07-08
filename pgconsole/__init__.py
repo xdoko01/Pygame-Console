@@ -686,6 +686,8 @@ class TextOutput:
 
 		''' Buffer related parameters
 		'''
+		# Stores list of the original texts - unprocessed for displaying under specific resolution - useful for regeneration of output after change of the resolution
+		self.unprocessed_buffer = []
 		# Stores list of past texts - including the breaks according to the resolution
 		self.buffer = []
 		# Necessary for implemetation of scrolling in the output buffer (PgUp, PgDown)
@@ -883,11 +885,22 @@ class TextOutput:
 		return breaks_pos
 
 
-	def write(self, text, color=None):
+	def write(self, text, color=None, store_unprocessed: bool=True):
 		''' Handles adding output text into textoutput buffer in given color
 		and shifting of the buffer.
 		'''	
 		logger.info(f'Start Writing Original Text: "{text}", Required color: "{color}".')
+
+		# Record the text in the unprocessed_buffer for possible later re-generation after change of ther resolution
+		if store_unprocessed: 
+			
+			self.unprocessed_buffer.append((text, color))
+
+			# Remove old rows from the unprocessed buffer - using the same size as processed buffer for simplicity
+			if len(self.unprocessed_buffer) > self.buffer_size:
+				for i in range(1,len(self.unprocessed_buffer)):
+					self.unprocessed_buffer[i-1] = self.unprocessed_buffer[i]
+				del self.unprocessed_buffer[len(self.buffer)-1]
 
 		# If color of the putput text is not specifically given, use predefined color
 		if not color: color = self.font_color
@@ -1519,11 +1532,20 @@ class Console(pygame.Surface):
 
 		# Initiate output text object
 		try:
+			unproc_buffer_bckp = self.console_output.unprocessed_buffer
 			buffer_bckp = self.console_output.buffer
 			buffer_offset_bckp = self.console_output.buffer_offset
 			self.console_output = TextOutput(self, (width - self.padding.left - self.padding.right), config.get('output')) if config.get('output', None) else None
-			self.console_output.buffer = buffer_bckp
+			
+			# Write again all texts on the buffer so it is nicelly formated if the resolution is changed
+			self.console_output.unprocessed_buffer = unproc_buffer_bckp
+			#self.console_output.buffer = buffer_bckp
 			self.console_output.buffer_offset = buffer_offset_bckp
+
+			# Push all the texts throu write functions to refill the buffer with texts for displaying - after resolution has changed
+			for text, color in self.console_output.unprocessed_buffer:
+				self.console_output.write(text, color, store_unprocessed=False) # Do not consider this rewriting as a new text to avoid duplicities
+
 		except AttributeError: # console_output not yet initiated
 			self.console_output = TextOutput(self, (width - self.padding.left - self.padding.right), config.get('output')) if config.get('output', None) else None
 
