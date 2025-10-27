@@ -206,5 +206,6 @@ pip -m install pgconsole
  - [ ] Update on pygame.org
 
 ## For Release 0.1.2
+ - [x] Dependency on fixed version of pgbitmapfont library version>=0.1.5
  - [ ] Put buffer management into separate function, so the logic is not repeated.
  - [ ] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
