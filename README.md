@@ -200,12 +200,15 @@ pip -m install pgconsole
  * Console output buffer is re-rendered after change of the resolution. The text is nicelly align in the new resolution.
  * New console command facilitating change of the resolution - `change_res`.
 
+### Release 0.1.2
+ * `pygame-ce` used instead of `pygame` due to problems with python 3.14
+ *  Dependency on fixed version of pgbitmapfont library version>=0.1.5
+
 ## Tasks
 
 ## General
  - [ ] Update on pygame.org
 
-## For Release 0.1.2
- - [x] Dependency on fixed version of pgbitmapfont library version>=0.1.5
+## For Release 0.1.3
  - [ ] Put buffer management into separate function, so the logic is not repeated.
  - [ ] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
