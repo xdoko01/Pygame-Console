@@ -10,3 +10,6 @@ __pycache__
 # Ignore distro
 **/dist
 **/pgconsole.egg-info
+
+# Ignore venv
+venv/
