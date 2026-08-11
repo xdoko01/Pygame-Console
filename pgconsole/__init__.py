@@ -98,6 +98,62 @@ class Padding(tuple):
 		self.left = padding[2] if len(padding) > 2 else 0
 		self.right = padding[3] if len(padding) > 3 else 0
 
+class StdIOOutput:
+	''' Minimal TextOutput-compatible wrapper around a standard IO stream (usually sys.stdout).
+
+	CommandLineProcessor writes its output as write(text, color=...) and reads the colors
+	from the font_color* attributes of its output object. A plain stream has neither, so the
+	dispatcher used to fail as soon as the console had no graphical output part. This wrapper
+	gives the stream the missing interface. Colors are translated to ANSI escape sequences if
+	the stream is a terminal, otherwise they are ignored.
+	'''
+
+	def __init__(self, stream=None):
+		self.stream = stream if stream is not None else sys.stdout
+
+		# Same defaults as the TextOutput ones, so that the colors are consistent
+		self.font_color = None
+		self.font_color_error = (255,69,0)
+		self.font_color_info = (238,210,2)
+
+	def _supports_colors(self) -> bool:
+		''' ANSI colors only make sense when writing to a terminal.
+		'''
+		try:
+			return bool(self.stream.isatty())
+		except (AttributeError, ValueError):
+			return False
+
+	def write(self, text, color=None):
+		''' Writes the text to the stream, optionally colored. Accepts and honours the
+		same color parameter as TextOutput.write.
+		'''
+		text = str(text)
+
+		# Wrap the text into the ANSI true-color escape sequence
+		if color and self._supports_colors():
+			try:
+				red, green, blue = color
+				text = f'\x1b[38;2;{int(red)};{int(green)};{int(blue)}m{text}\x1b[0m'
+			except (TypeError, ValueError):
+				pass # Not a RGB tuple - write the text as it is
+
+		self.stream.write(text if text.endswith('\n') else text + '\n')
+
+	def flush(self):
+		''' Delegated to the wrapped stream - cmd.Cmd expects a file-like object.
+		'''
+		try:
+			self.stream.flush()
+		except (AttributeError, ValueError):
+			pass
+
+	def prepare_surface(self):
+		''' No surface to prepare - here only so that callers do not need to know
+		whether they write to the graphical console or to the standard output.
+		'''
+		pass
+
 class CommandLineProcessor(cmd.Cmd):
 	''' Class implementing the logic behind console commands.
 	Code was taken, modified and adjsuted from original Tuxemon game 
@@ -109,6 +165,10 @@ class CommandLineProcessor(cmd.Cmd):
 		to console graphical output, otherwise it would go to the text
 		window.
 		'''
+
+		# If the output is not a console output part but a plain stream (standard IO), wrap it
+		# so that it supports the write(text, color) signature and the font_color* attributes
+		if not hasattr(output, 'font_color_error'): output = StdIOOutput(output)
 
 		# Initiate the parent class
 		cmd.Cmd.__init__(self, stdin=input, stdout=output)
@@ -543,23 +603,49 @@ class Header:
 			self.txt_surf.blit(self.fnt_txt_surf, (0,0))
 
 		if self.layout_name == 'TEXT_CENTRE':
-			if self.font_bck_color: self.txt_surf.blit(self.fnt_bck_surf, (int(self.txt_surf_dim.width // 2 - self.fnt_text_surf_dim.width // 2), 0))
+			if self.font_bck_color: self.txt_surf.blit(self.fnt_bck_surf, (int(self.txt_surf_dim.width // 2 - self.fnt_txt_surf_dim.width // 2), 0))
 			self.txt_surf.blit(self.fnt_txt_surf, (int(self.txt_surf_dim.width // 2 - self.fnt_txt_surf_dim.width // 2), 0))
 
 		if self.layout_name == 'SCROLL_LEFT':
-			if self.scroll_offset > -1 * self.fnt_txt_surf_dim.width:
-				self.scroll_offset = (self.scroll_offset - self.scroll_offset_speed)  
-			else: 
-				self.scroll_offset = self.txt_surf_dim.width
+
+			# If the time for scrolling comes
+			current_time = pygame.time.get_ticks()
+
+			# Calculate how much time has passed since last time (ms)
+			delay = current_time - self.scroll_last_time
+
+			if delay >= self.scroll_offset_speed_ms:
+
+				# Reset the scrolling time check
+				self.scroll_last_time = current_time
+
+				# Move the text by given number of pixels or start again from the right border
+				if self.scroll_offset > -1 * self.fnt_txt_surf_dim.width:
+					self.scroll_offset = (self.scroll_offset - self.scroll_offset_speed_px)
+				else:
+					self.scroll_offset = self.txt_surf_dim.width
 
 			if self.font_bck_color: self.txt_surf.blit(self.fnt_bck_surf, (int(self.scroll_offset), 0))
 			self.txt_surf.blit(self.fnt_txt_surf, (int(self.scroll_offset), 0))
 
 		if self.layout_name == 'SCROLL_RIGHT':
-			if self.scroll_offset < 1 * self.txt_surf_dim.width:
-				self.scroll_offset = (self.scroll_offset + self.scroll_offset_speed)
-			else: 
-				self.scroll_offset = -1 * self.fnt_txt_surf_dim.width
+
+			# If the time for scrolling comes
+			current_time = pygame.time.get_ticks()
+
+			# Calculate how much time has passed since last time (ms)
+			delay = current_time - self.scroll_last_time
+
+			if delay >= self.scroll_offset_speed_ms:
+
+				# Reset the scrolling time check
+				self.scroll_last_time = current_time
+
+				# Move the text by given number of pixels or start again from the left border
+				if self.scroll_offset < 1 * self.txt_surf_dim.width:
+					self.scroll_offset = (self.scroll_offset + self.scroll_offset_speed_px)
+				else:
+					self.scroll_offset = -1 * self.fnt_txt_surf_dim.width
 
 			if self.font_bck_color: self.txt_surf.blit(self.fnt_bck_surf, (int(self.scroll_offset), 0))
 			self.txt_surf.blit(self.fnt_txt_surf, (int(self.scroll_offset), 0))
@@ -885,10 +971,18 @@ class TextOutput:
 		return breaks_pos
 
 
+	def _trim_buffer(self, buffer: list):
+		''' Drops the oldest rows from the given buffer so that it never holds
+		more than buffer_size rows. The buffer is modified in place, so all the
+		references to it stay valid.
+		'''
+		while len(buffer) > self.buffer_size:
+			del buffer[0]
+
 	def write(self, text, color=None, store_unprocessed: bool=True):
 		''' Handles adding output text into textoutput buffer in given color
 		and shifting of the buffer.
-		'''	
+		'''
 		logger.info(f'Start Writing Original Text: "{text}", Required color: "{color}".')
 
 		# Record the text in the unprocessed_buffer for possible later re-generation after change of ther resolution
@@ -897,10 +991,7 @@ class TextOutput:
 			self.unprocessed_buffer.append((text, color))
 
 			# Remove old rows from the unprocessed buffer - using the same size as processed buffer for simplicity
-			if len(self.unprocessed_buffer) > self.buffer_size:
-				for i in range(1,len(self.unprocessed_buffer)):
-					self.unprocessed_buffer[i-1] = self.unprocessed_buffer[i]
-				del self.unprocessed_buffer[len(self.buffer)-1]
+			self._trim_buffer(self.unprocessed_buffer)
 
 		# If color of the putput text is not specifically given, use predefined color
 		if not color: color = self.font_color
@@ -961,10 +1052,7 @@ class TextOutput:
 					logger.debug(f'Writing text_part: "{text_part}", Length: {len(text_part)} chars, Px: {sum(char[4] for char in self.font_object.get_metrics(text_part))}')
 
 					# Remove old rows from the buffer
-					if len(self.buffer) > self.buffer_size:
-						for i in range(1,len(self.buffer)):
-							self.buffer[i-1] = self.buffer[i]
-						del self.buffer[len(self.buffer)-1]
+					self._trim_buffer(self.buffer)
 				"""
 				# How many characters can we put one one line - minimal from setup and what can fit on the screen
 				# TEMPORARILY DISABLING AS BITMAPFONT does not have this get_metrics function self.display_columns = min(self.display_columns, self.width // self.font_object.get_metrics("_")[0][1])
@@ -1501,6 +1589,11 @@ class Console(pygame.Surface):
 
 		self.app = app
 
+		# Remember the init parameters so that the console can be reset/reloaded later on.
+		# Private names are used on purpose - pygame.Surface already owns width/height.
+		self._init_config = config
+		self._init_width = width
+
 		# Dictionary with default values
 		default_config = {
 						'animation' : None,
@@ -1896,12 +1989,29 @@ class Console(pygame.Surface):
 		return self.enabled
 
 	def reset(self):
-		''' Method that reloads and resets the console
+		''' Method that reloads and resets the console.
+
+		The console is re-initiated with the configuration given during the last init
+		(or Console instantiation) and both the output and the input are cleared.
 		'''
-		pass
+		# Re-init the console with the remembered configuration. init() keeps the buffers
+		# on purpose (it is used for re-rendering after a resolution change), so they are cleared after.
+		self.init(width=self._init_width, config=self._init_config, app=self.app)
+
+		# Throw away the output history and the entered text
+		self.clear()
+		if self.console_input:
+			self.console_input.clear_text()
+			self.console_input.buffer = list()
+			self.console_input.buffer_offset = 0
 
 	def clear(self):
 		''' Method that clears the output on the screen
 		'''
-		self.console_output.log = list()
+		if not self.console_output: return
+
+		self.console_output.buffer = list()
+		self.console_output.unprocessed_buffer = list()
+		self.console_output.buffer_offset = 0
+		self.output_render_pending = False
 		self.console_output.prepare_surface()

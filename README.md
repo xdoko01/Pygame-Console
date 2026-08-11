@@ -245,6 +245,13 @@ for record in records:
  * Dependency on the obsolete `pathlib` PyPI backport removed - it shadowed the stdlib module and broke installs on modern Python (#12)
  * `write(..., defer_render=True)` renders the output buffer only once per frame instead of once per written line (#13)
  * Configuration without the `global` section no longer crashes `Console.init()` (#18)
+ * `Console.clear()` really clears the output - it used to create a stray `log` attribute and clear nothing (#14)
+ * `Console.reset()` implemented - re-inits the console with the last used configuration and clears output and input (#15)
+ * `SCROLL_LEFT` and `SCROLL_RIGHT` header/footer layouts fixed - they crashed on the first `show()` and now respect the layout speed in ms/px like their `*_CONTINUOUS` counterparts (#16)
+ * Centred header/footer text with `font_bck_color` set no longer crashes (#17)
+ * Output buffer trimming corrected and moved into one `_trim_buffer()` function - the unprocessed buffer used to be indexed by the length of the wrapped one (#19, #26)
+ * `CommandLineProcessor` writing to standard IO instead of the console supports the `color` parameter - colors are emitted as ANSI sequences when the stream is a terminal (#27)
+ * Tests added for the above - `tests/test_console.py`, runs headless
 
 ## Tasks
 
@@ -252,5 +259,5 @@ for record in records:
  - [ ] Update on pygame.org
 
 ## For Release 0.1.3
- - [ ] Put buffer management into separate function, so the logic is not repeated.
- - [ ] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
+ - [x] Put buffer management into separate function, so the logic is not repeated.
+ - [x] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
