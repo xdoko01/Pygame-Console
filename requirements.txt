@@ -1,4 +1,2 @@
 pygame-ce
-pgbitmapfont>=0.1.4
-pathlib
-
+pgbitmapfont>=0.1.5

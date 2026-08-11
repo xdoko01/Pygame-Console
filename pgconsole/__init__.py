@@ -1423,10 +1423,14 @@ class Console(pygame.Surface):
 	ANIMATIONS = ['TOP', 'BOTTOM']
 
 
-	def __init__(self, app, width, config={}):
+	def __init__(self, app, width, config={}, cli_factory=None):
 		'''
 		:param app: Reference to the instance that is govern (is accessible) by/from the console
 		:param width: Required width of the console window. Height is determined by height of individual console parts.
+		:param cli_factory: Optional callable (typically a CommandLineProcessor subclass) used to create the
+			command dispatcher instead of the built-in CommandLineProcessor. It is called with the same
+			arguments as CommandLineProcessor - (app, output=..., cmd_pckg_path=..., script_path=...) when
+			the console has an output part, (app) otherwise. Takes precedence over the `cli_class` config key.
 		:param config: Dictionary storing all the configs necessary for correct display of console. See keys explanation below:
 			
 			global (mandatory section, see defaults below): Parameters that govern global console configuration.
@@ -1443,14 +1447,17 @@ class Console(pygame.Surface):
 				cmd_pckg_path (optional, default None): Package, where module with console commands can be found.
 				script_path (optional, default None): Path, where console scripts can be found.
 				startup_scripts (optional, default None): Path to the script that should be executed after the console is initiated.
-				
+				cli_class (optional, default None): Importable path to the class used as command dispatcher instead of
+					the built-in CommandLineProcessor. Accepted forms are 'my.package.MyProcessor' or 'my.package:MyProcessor'.
+					Ignored if the cli_factory constructor argument is given.
+
 			header (optional section, see Header class for details): Parameters that govern console header configuration.
 			output (optional section, see TextOutput class for details): Parameters that govern console output configuration.
 			input (optional section, see TextInput class for details): Parameters that govern console input configuration.
 			footer (optional section, see Header class for details): Parameters that govern console footer configuration.
 		'''
 
-		self.init(app=app, width=width, config=config)
+		self.init(app=app, width=width, config=config, cli_factory=cli_factory)
 
 		# Put the initial text on the console in given color - only for the first instantiation
 		if self.console_output: self.write(self.welcome_msg, self.welcome_msg_color)
@@ -1464,10 +1471,12 @@ class Console(pygame.Surface):
 			if self.console_output: self.console_output.prepare_surface() # show the result on console
 
 
-	def init(self, width: int, config: dict={}, app=None):
+	def init(self, width: int, config: dict={}, app=None, cli_factory=None):
 		''' Can be called when the configuration is changed.
 
 		:param app: Reference to the instance that is govern (is accessible) by/from the console
+		:param cli_factory: Optional callable creating the command dispatcher. See Console.__init__.
+			If not given, the factory remembered from the previous init call is reused.
 		:param width: Required width of the console window. Height is determined by height of individual console parts.
 		:param config: Dictionary storing all the configs necessary for correct display of console. See keys explanation below:
 			
@@ -1552,9 +1561,22 @@ class Console(pygame.Surface):
 		# Initiate footer object
 		self.console_footer = Header(self, width - self.padding.left - self.padding.right, config.get('footer')) if config.get('footer', None) else None		
 
+		# No deferred (not yet rendered) text on the output after (re)init
+		self.output_render_pending = False
+
 		# Initiace object for processing console commands - output of the class is redirected
 		# if console_output is not defined then standard output is used (sustem text console)
-		self.cli = CommandLineProcessor(self.app, output=self.console_output, cmd_pckg_path=config.get('global').get('cmd_pckg_path', None), script_path=config.get('global').get('script_path', None)) if self.console_output else CommandLineProcessor(self.app)
+		# The dispatcher class can be replaced either by the cli_factory argument or by the 'cli_class' config key.
+		self.cli_factory = (cli_factory
+							or Console._resolve_cli_class(global_config.get('cli_class', None))
+							or getattr(self, 'cli_factory', None)
+							or CommandLineProcessor)
+
+		self.cli = self.cli_factory(self.app,
+									output=self.console_output,
+									cmd_pckg_path=global_config.get('cmd_pckg_path', None),
+									script_path=global_config.get('script_path', None)
+									) if self.console_output else self.cli_factory(self.app)
 
 		# Correct the height dimension so that all the text rows are displayable
 		self.dim = (width, self.padding.up 
@@ -1592,6 +1614,29 @@ class Console(pygame.Surface):
 			self.anim_last_time = 0
 			# Initiate variable for storing percentage of shown console surface (0 nothing shown, 100 all shown)
 			self.anim_perc = 0
+
+	@staticmethod
+	def _resolve_cli_class(cli_class):
+		''' Translates the 'cli_class' config value into a callable creating the command dispatcher.
+
+		Accepted values are None (built-in CommandLineProcessor is used), an already imported
+		class/callable or an importable path in the form 'my.package.MyProcessor' or 'my.package:MyProcessor'.
+		'''
+		if not cli_class: return None
+
+		# Already a class/callable - use it as it is
+		if not isinstance(cli_class, str): return cli_class
+
+		# Split the string into module and attribute part - both 'module:Class' and 'module.Class' are supported
+		module_path, _, class_name = cli_class.rpartition(':') if ':' in cli_class else cli_class.rpartition('.')
+
+		if not module_path:
+			raise ValueError(f"cli_class '{cli_class}' is not a valid importable path - expected 'my.package.MyProcessor'.")
+
+		try:
+			return getattr(import_module(module_path), class_name)
+		except (ImportError, AttributeError) as E:
+			raise ValueError(f"cli_class '{cli_class}' could not be imported.") from E
 
 	def set_cli_app(self, module: str):
 		'''Sets the module/class/function to be used as reference entry point to the game.
@@ -1632,7 +1677,10 @@ class Console(pygame.Surface):
 		''' Call updates of relevant console parts. If ENTER was pressed, process the command.
 		Only process if console is enabled.
 		'''
-		
+
+		# Render the texts written with defer_render=True - one re-render per frame, even if console is hidden
+		self.flush()
+
 		# Do update only if the console is active/enabled
 		if self.enabled:
 
@@ -1669,9 +1717,12 @@ class Console(pygame.Surface):
 		If parameter disable_anim is set to True, animation is forcefully disabled.
 		'''
 
+		# Render the texts written with defer_render=True, if update() has not done it already
+		self.flush()
+
 		#####
 		# Calculate the delta parameters for displaying animated console
-		#####		
+		#####
 
 		# No animation required - no delta from original position. Console is either fully shown or fully hidden.
 		if not self.animation or disable_anim:
@@ -1801,13 +1852,29 @@ class Console(pygame.Surface):
 					int(pos[1] + anim_dy + self.footer_position[1]))
 					)
 	
-	def write(self, text, color=None):
-		''' Put some text onto a console by calling this function
+	def write(self, text, color=None, defer_render=False):
+		''' Put some text onto a console by calling this function.
+
+		:param defer_render: If True, the (expensive) re-render of the visible buffer is not done
+			immediatelly but only once per frame in update()/show(). Use it when writing many lines
+			in a row - for example when mirroring log records into the console.
 		'''
 		self.console_output.write(str(text), color)
 
 		# Without calling prepare_surface the text will not be shown immediatelly
-		self.console_output.prepare_surface()
+		if defer_render:
+			self.output_render_pending = True
+		else:
+			self.console_output.prepare_surface()
+			self.output_render_pending = False
+
+	def flush(self):
+		''' Re-renders the console output surface if there are texts written with defer_render=True.
+		Called automatically once per frame from update() and show().
+		'''
+		if self.output_render_pending:
+			self.output_render_pending = False
+			if self.console_output: self.console_output.prepare_surface()
 
 	def toggle(self, enable=None) -> bool:
 		''' Toggle on/off the console. Influences if updade and show console functions are 

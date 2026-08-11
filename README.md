@@ -192,6 +192,42 @@ pip -m install pgconsole
  ![screenshot](docs/Integr01.png)
  ![screenshot](docs/Integr02.png)
 
+### Using your own command dispatcher
+
+Unknown commands are by default evaluated as Python (see `do_py_script`). If your game needs to route them
+somewhere else - to a server, to its own command registry - supply your own `CommandLineProcessor` subclass
+instead of subclassing the whole `Console`:
+
+```python
+from pgconsole import Console, CommandLineProcessor
+
+class MyCLI(CommandLineProcessor):
+    def default(self, line):
+        # Send the unknown command wherever you like instead of running it as Python
+        my_game.send_admin_request(line)
+
+console = Console(app=my_game, width=800, config=my_config, cli_factory=MyCLI)
+```
+
+The same can be done from the configuration with the `cli_class` key in the `global` section, which takes an
+importable path - `"my_game.console.MyCLI"` or `"my_game.console:MyCLI"`. The `cli_factory` argument wins if both
+are given. The factory is remembered, so it survives a re-`init()` (for example after `change_res`).
+
+### Writing many lines at once
+
+`Console.write()` re-renders the visible output buffer on every call. When pushing a burst of texts onto the
+console - typically from a `logging.Handler` - pass `defer_render=True` and the re-render is done only once per
+frame from `update()`/`show()`:
+
+```python
+for record in records:
+    console.write(record, defer_render=True)
+```
+
+> **Security note:** the built-in dispatcher executes arbitrary Python - both via `!`/`do_shell` and via the
+> fallback `do_py_script` for unknown commands. That is what makes it a useful debug console, but it means
+> **untrusted input (for example anything arriving over the network) must never be passed to `cli.onecmd()`**.
+
 
 ## Changelog
 
@@ -203,6 +239,12 @@ pip -m install pgconsole
 ### Release 0.1.2
  * `pygame-ce` used instead of `pygame` due to problems with python 3.14
  *  Dependency on fixed version of pgbitmapfont library version>=0.1.5
+
+### Release 0.1.3
+ * Custom command dispatcher can be injected - `cli_factory` argument of `Console` or `cli_class` key in the `global` config section (#10)
+ * Dependency on the obsolete `pathlib` PyPI backport removed - it shadowed the stdlib module and broke installs on modern Python (#12)
+ * `write(..., defer_render=True)` renders the output buffer only once per frame instead of once per written line (#13)
+ * Configuration without the `global` section no longer crashes `Console.init()` (#18)
 
 ## Tasks
 
