@@ -224,6 +224,20 @@ for record in records:
     console.write(record, defer_render=True)
 ```
 
+### Making the config independent of the working directory
+
+`font_file`, `bck_image` and `script_path` are by default resolved against the current working directory, so a
+config with relative paths only works when the game is started from the right place. Pass `base_path` (or set it
+in the `global` config section) and the relative values are resolved against it instead:
+
+```python
+from pathlib import Path
+
+console = Console(app=my_game, width=800, config=my_config, base_path=Path(__file__).parent)
+```
+
+Absolute paths in the config are always left alone, and without `base_path` nothing changes.
+
 > **Security note:** the built-in dispatcher executes arbitrary Python - both via `!`/`do_shell` and via the
 > fallback `do_py_script` for unknown commands. That is what makes it a useful debug console, but it means
 > **untrusted input (for example anything arriving over the network) must never be passed to `cli.onecmd()`**.
@@ -251,6 +265,11 @@ for record in records:
  * Centred header/footer text with `font_bck_color` set no longer crashes (#17)
  * Output buffer trimming corrected and moved into one `_trim_buffer()` function - the unprocessed buffer used to be indexed by the length of the wrapped one (#19, #26)
  * `CommandLineProcessor` writing to standard IO instead of the console supports the `color` parameter - colors are emitted as ANSI sequences when the stream is a terminal (#27)
+ * Relative `font_file`, `bck_image` and `script_path` config values can be resolved against a `base_path` (constructor argument or `global` config key) instead of the current working directory (#24)
+ * `display_lines` is now optional with default 10 - omitting it used to fail later with an opaque `AttributeError` (#23)
+ * Trailing whitespace is really removed from the written text - the result of `rstrip()` used to be discarded (#20)
+ * A failing `py_script` now shows what the script printed before it failed (#22)
+ * Original exception is kept as the cause when a command module cannot be loaded or registered (#21)
  * Tests added for the above - `tests/test_console.py`, runs headless
 
 ## Tasks

@@ -76,6 +76,25 @@ def str_to_package_module(package: str, module: str):
         raise ValueError(f'Incorrect package.module name "{package}.{module}"')
 
 
+def resolve_path(path, base_path=None):
+	'''Resolves a possibly relative path against the given base path.
+
+	Relative paths in the configuration (font files, background images, script directory)
+	are otherwise resolved against the current working directory, which makes a config
+	usable only when the process is started from the right directory.
+
+	Parameters:
+		:param path: Path to resolve. None and absolute paths are returned unchanged.
+		:param base_path: Directory the relative path is resolved against. If not given,
+			the path is returned unchanged (i.e. the original CWD-relative behaviour).
+	'''
+	if path is None or base_path is None: return path
+
+	path = Path(path)
+
+	return path if path.is_absolute() else Path(base_path) / path
+
+
 class Padding(tuple):
 	''' Class to facilitate easier and more understandable work 
 	with console paddings that are tuples (indexing). Items of this class
@@ -194,17 +213,17 @@ class CommandLineProcessor(cmd.Cmd):
 		try:
 			command_module = str_to_package_module(None, command_module_path_absolute)
 
-		except ValueError:
+		except ValueError as E:
 			#self.output.write(f'Error during loading of py script command module "{command_module_path_absolute}".', color=self.output.font_color_error)
-			raise ValueError(f'Error during loading of py script command module "{command_module_path_absolute}".')
+			raise ValueError(f'Error during loading of py script command module "{command_module_path_absolute}".') from E
 
 		# Try to register the script
 		try:
 			command_module.initialize(self._register_command, command_module_name)
 
-		except ValueError:
+		except ValueError as E:
 			self.output.write(f'Error during initiating/registering of command module "{command_module_path_absolute}".', color=self.output.font_color_error)
-			raise ValueError
+			raise ValueError(f'Error during initiating/registering of command module "{command_module_path_absolute}".') from E
 
 		return self._cmd_scripts.get(command_module_name)
 
@@ -286,7 +305,8 @@ class CommandLineProcessor(cmd.Cmd):
 			py_script(game_ctx=self.app, params=params) # call the script
 			self.output.write(str(console_out.getvalue())) # write anything to the console
 		except Exception as E:
-			#self.output.write(str(console_out.getvalue()))
+			# Show whatever the script managed to print before it failed - useful for debugging
+			if console_out.getvalue(): self.output.write(str(console_out.getvalue()))
 			self.output.write(str(E), color=self.output.font_color_error)
 			return -1
 		finally:
@@ -493,6 +513,9 @@ class Header:
 			- fnt_bck_surf_dim ... dimensions (Rect) of the text background
 		''' 
 
+		# Resolve the relative font path against the console base_path, if the console defines one
+		self.font_file = resolve_path(self.font_file, getattr(self.console, 'base_path', None))
+
 		if self.font_type == "BITMAP":
 			from pgbitmapfont import BitmapFont
 			self.font_object = BitmapFont(path=Path(self.font_file), size=self.font_size, spacing=config.get('font_spacing', (1,0)))
@@ -519,7 +542,7 @@ class Header:
 		
 		# Fill the surface with picture	if necessary
 		if self.bck_image:
-			self.bck_image = pygame.image.load(str(self.bck_image)).convert()
+			self.bck_image = pygame.image.load(str(resolve_path(self.bck_image, getattr(self.console, 'base_path', None)))).convert()
 			if self.bck_image_resize:
 				self.bck_image = pygame.transform.scale(self.bck_image, (self.surf_dim.width, self.surf_dim.height))
 			
@@ -737,7 +760,7 @@ class TextOutput:
 			bck_alpha (optional, default 255): 0-255, if header background should be transparent
 			prompt (optional, default ''): Characters printed on the beginning of every output line.
 			buffer_size (optional, default 100): How many lines of output should be stored as history.
-			display_lines (mandatory): How many lines of output should be displayed on console at the same time. Defines height of the console.
+			display_lines (optional, default 10): How many lines of output should be displayed on console at the same time. Defines height of the console.
 			line_spacing (optional, default None): How big line spacing should there be between text output lines.
 		'''		
 		# Dictionary with default values
@@ -754,6 +777,7 @@ class TextOutput:
 					'bck_alpha' : 255,
 					'prompt'	: '',
 					'buffer_size': 100,
+					'display_lines': 10,
 					'line_spacing': None,
 					'tab_spaces': 4				# substitute tabs with spaces
 		}
@@ -793,6 +817,9 @@ class TextOutput:
 								the text so it does not cross the console borders
 			- fnt_bck_surf_dim ... dimensions (Rect) of the text background
 		''' 
+
+		# Resolve the relative font path against the console base_path, if the console defines one
+		self.font_file = resolve_path(self.font_file, getattr(self.console, 'base_path', None))
 
 		if self.font_type == "BITMAP":
 			from pgbitmapfont import BitmapFont
@@ -997,7 +1024,7 @@ class TextOutput:
 		if not color: color = self.font_color
 
 		# Remove newline at the end
-		text.rstrip()
+		text = text.rstrip()
 
 		# Substitute tabs with predefined number of spaces
 		text = text.replace('\t', self.tab_spaces * ' ') 
@@ -1183,6 +1210,9 @@ class TextInput:
 								the text so it does not cross the console borders
 			- fnt_bck_surf_dim ... dimensions (Rect) of the text background
 		''' 
+
+		# Resolve the relative font path against the console base_path, if the console defines one
+		self.font_file = resolve_path(self.font_file, getattr(self.console, 'base_path', None))
 
 		if self.font_type == "BITMAP":
 			from pgbitmapfont import BitmapFont
@@ -1511,7 +1541,7 @@ class Console(pygame.Surface):
 	ANIMATIONS = ['TOP', 'BOTTOM']
 
 
-	def __init__(self, app, width, config={}, cli_factory=None):
+	def __init__(self, app, width, config={}, cli_factory=None, base_path=None):
 		'''
 		:param app: Reference to the instance that is govern (is accessible) by/from the console
 		:param width: Required width of the console window. Height is determined by height of individual console parts.
@@ -1519,6 +1549,10 @@ class Console(pygame.Surface):
 			command dispatcher instead of the built-in CommandLineProcessor. It is called with the same
 			arguments as CommandLineProcessor - (app, output=..., cmd_pckg_path=..., script_path=...) when
 			the console has an output part, (app) otherwise. Takes precedence over the `cli_class` config key.
+		:param base_path: Optional directory the relative paths in the config (font_file, bck_image,
+			script_path) are resolved against. Without it, they are resolved against the current working
+			directory, so a config only works when the process is started from the right place.
+			Takes precedence over the `base_path` config key.
 		:param config: Dictionary storing all the configs necessary for correct display of console. See keys explanation below:
 			
 			global (mandatory section, see defaults below): Parameters that govern global console configuration.
@@ -1535,6 +1569,9 @@ class Console(pygame.Surface):
 				cmd_pckg_path (optional, default None): Package, where module with console commands can be found.
 				script_path (optional, default None): Path, where console scripts can be found.
 				startup_scripts (optional, default None): Path to the script that should be executed after the console is initiated.
+				base_path (optional, default None): Directory the relative font_file, bck_image and script_path
+					values are resolved against. Without it they are resolved against the current working directory.
+					Ignored if the base_path constructor argument is given.
 				cli_class (optional, default None): Importable path to the class used as command dispatcher instead of
 					the built-in CommandLineProcessor. Accepted forms are 'my.package.MyProcessor' or 'my.package:MyProcessor'.
 					Ignored if the cli_factory constructor argument is given.
@@ -1545,7 +1582,7 @@ class Console(pygame.Surface):
 			footer (optional section, see Header class for details): Parameters that govern console footer configuration.
 		'''
 
-		self.init(app=app, width=width, config=config, cli_factory=cli_factory)
+		self.init(app=app, width=width, config=config, cli_factory=cli_factory, base_path=base_path)
 
 		# Put the initial text on the console in given color - only for the first instantiation
 		if self.console_output: self.write(self.welcome_msg, self.welcome_msg_color)
@@ -1559,12 +1596,14 @@ class Console(pygame.Surface):
 			if self.console_output: self.console_output.prepare_surface() # show the result on console
 
 
-	def init(self, width: int, config: dict={}, app=None, cli_factory=None):
+	def init(self, width: int, config: dict={}, app=None, cli_factory=None, base_path=None):
 		''' Can be called when the configuration is changed.
 
 		:param app: Reference to the instance that is govern (is accessible) by/from the console
 		:param cli_factory: Optional callable creating the command dispatcher. See Console.__init__.
 			If not given, the factory remembered from the previous init call is reused.
+		:param base_path: Optional directory the relative paths in the config are resolved against.
+			See Console.__init__. If not given, the base path remembered from the previous init call is reused.
 		:param width: Required width of the console window. Height is determined by height of individual console parts.
 		:param config: Dictionary storing all the configs necessary for correct display of console. See keys explanation below:
 			
@@ -1580,6 +1619,8 @@ class Console(pygame.Surface):
 				welcome_msg (optional, default ''): Text displayed on console after console init.
 				welcome_msg_color (otional, default (255,255,255)): Color of the console welcome text as tuple with 3 values.
 				script_module_path: Where to look for the console scripts containing console commands.
+				base_path (optional, default None): Directory the relative font_file, bck_image and script_path
+					values are resolved against. See Console.__init__.
 
 			header (optional section, see Header class for details): Parameters that govern console header configuration.
 			output (optional section, see TextOutput class for details): Parameters that govern console output configuration.
@@ -1616,7 +1657,12 @@ class Console(pygame.Surface):
 		# Instantiate padding for further use
 		self.padding = Padding(self.padding)
 
-		''' Initiates all console supporting objects - header, footer, 
+		# Directory the relative paths in the config (fonts, images, scripts) are resolved against.
+		# Remembered across re-inits, since init() can be called without the base_path argument (change_res).
+		self._init_base_path = base_path if base_path else getattr(self, '_init_base_path', None)
+		self.base_path = self._init_base_path if self._init_base_path else global_config.get('base_path', None)
+
+		''' Initiates all console supporting objects - header, footer,
 		text_input and text_output.
 		'''
 		# Initiate header object, use defaults if header params are not passed during initiation
@@ -1668,7 +1714,7 @@ class Console(pygame.Surface):
 		self.cli = self.cli_factory(self.app,
 									output=self.console_output,
 									cmd_pckg_path=global_config.get('cmd_pckg_path', None),
-									script_path=global_config.get('script_path', None)
+									script_path=resolve_path(global_config.get('script_path', None), self.base_path)
 									) if self.console_output else self.cli_factory(self.app)
 
 		# Correct the height dimension so that all the text rows are displayable
@@ -1687,7 +1733,7 @@ class Console(pygame.Surface):
 
 		# Prepare console background image
 		if self.bck_image:
-			self.bck_image = pygame.image.load(str(self.bck_image)).convert()
+			self.bck_image = pygame.image.load(str(resolve_path(self.bck_image, self.base_path))).convert()
 			if self.bck_image_resize:
 				self.bck_image = pygame.transform.scale(self.bck_image, (self.dim))
 

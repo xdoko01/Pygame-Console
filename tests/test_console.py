@@ -15,7 +15,7 @@ sys.path.insert(0, ROOT)
 
 import pygame
 
-from pgconsole import Console, CommandLineProcessor, Header, StdIOOutput
+from pgconsole import Console, CommandLineProcessor, Header, StdIOOutput, resolve_path
 
 FONT = os.path.join(ROOT, 'examples', 'fonts', 'truetype', 'IBMPlexMono-Regular.ttf')
 
@@ -262,6 +262,107 @@ def test_cli_supports_color_on_standard_io():
 
 	assert 'Registered commands' in written
 	assert '\x1b[' not in written  # StringIO is not a terminal - no escape sequences
+
+
+#####
+# P2 items - rstrip, display_lines default, path resolution, kept stdout (#20, #22, #23, #24)
+#####
+
+def test_trailing_whitespace_is_stripped(console):
+	''' The result of rstrip() used to be thrown away, so the trailing whitespace stayed
+	in the displayed row (#20).
+	'''
+	output = console.console_output
+	console.clear()
+
+	output.write('text with trailing spaces   \n')
+
+	assert [text for text, color in output.buffer] == ['text with trailing spaces']
+
+
+def test_display_lines_has_a_default(display, config):
+	''' Omitting display_lines must not blow up with an opaque AttributeError (#23).
+	'''
+	del config['output']['display_lines']
+	console = Console(DummyApp(), 800, config)
+
+	assert console.console_output.display_lines == 10
+	console.write('still works')
+
+
+def test_relative_paths_are_resolved_against_base_path(display, monkeypatch, tmp_path):
+	''' With base_path given, a config using relative paths must work from any CWD (#24).
+	'''
+	relative_config = {
+		'global': {'script_path': 'examples/scripts'},
+		'output': {'font_file': 'examples/fonts/truetype/IBMPlexMono-Regular.ttf', 'display_lines': 3},
+		'header': {'font_file': 'examples/fonts/truetype/IBMPlexMono-Regular.ttf', 'text': 'header'},
+	}
+
+	# Run from a directory that has nothing to do with the repo
+	monkeypatch.chdir(tmp_path)
+
+	# Without base_path the relative font path cannot be found
+	with pytest.raises(FileNotFoundError):
+		Console(DummyApp(), 800, relative_config)
+
+	console = Console(DummyApp(), 800, relative_config, base_path=ROOT)
+
+	assert os.path.isabs(str(console.console_output.font_file))
+	assert os.path.isabs(str(console.cli.script_path))
+	# Remembered on re-init, which is what change_res does
+	console.init(width=640, config=relative_config, app=console.app)
+	assert console.base_path == ROOT
+
+
+def test_base_path_config_key(display, monkeypatch, tmp_path):
+	monkeypatch.chdir(tmp_path)
+	console = Console(DummyApp(), 800, {
+		'global': {'base_path': ROOT},
+		'header': {'font_file': 'examples/fonts/truetype/IBMPlexMono-Regular.ttf', 'text': 'header'},
+	})
+	assert os.path.isabs(str(console.console_header.font_file))
+
+
+def test_resolve_path_leaves_absolute_and_unset_paths_alone():
+	absolute = os.path.join(ROOT, 'examples')
+
+	assert resolve_path(None, ROOT) is None
+	assert str(resolve_path(absolute, ROOT)) == absolute
+	assert resolve_path('examples', None) == 'examples'  # no base_path - original behaviour
+	assert str(resolve_path('examples', ROOT)) == os.path.join(ROOT, 'examples')
+
+
+def test_failing_py_script_keeps_its_output():
+	''' What the script printed before failing must not be thrown away (#22).
+	'''
+	stream = io.StringIO()
+	cli = CommandLineProcessor(DummyApp(), output=stream, cmd_pckg_path='examples.commands')
+
+	def failing_script(game_ctx, params):
+		print('printed before the error')
+		raise RuntimeError('boom')
+
+	cli._cmd_scripts['failing'] = failing_script
+
+	assert cli.do_py_script('failing') == -1
+	written = stream.getvalue()
+
+	assert 'printed before the error' in written
+	assert 'boom' in written
+	assert sys.stdout is sys.__stdout__  # stdout restored
+
+
+def test_register_command_keeps_the_original_error():
+	''' The original exception must stay chained instead of being swallowed (#21).
+	'''
+	cli = CommandLineProcessor(DummyApp(), output=io.StringIO(), cmd_pckg_path='no_such_package')
+
+	with pytest.raises(ValueError) as error:
+		cli.register_command('whatever')
+
+	assert 'no_such_package.whatever' in str(error.value)
+	assert error.value.__cause__ is not None
 
 
 def test_stdio_output_colors_only_on_terminal():
