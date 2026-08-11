@@ -272,11 +272,6 @@ Absolute paths in the config are always left alone, and without `base_path` noth
  * Original exception is kept as the cause when a command module cannot be loaded or registered (#21)
  * Tests added for the above - `tests/test_console.py`, runs headless
 
-## Tasks
-
-## General
+## Future Releases
  - [ ] Update on pygame.org
-
-## For Release 0.1.3
- - [x] Put buffer management into separate function, so the logic is not repeated.
- - [x] CommandLineInterface when output is not console but standard IO, it does not support color parameter. Fix it.
+ - [ ] Drop the transitive `pathlib` dependency once `pgbitmapfont` no longer requires it
