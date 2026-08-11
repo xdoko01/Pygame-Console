@@ -272,6 +272,9 @@ Absolute paths in the config are always left alone, and without `base_path` noth
  * Original exception is kept as the cause when a command module cannot be loaded or registered (#21)
  * Tests added for the above - `tests/test_console.py`, runs headless
 
+### Release 0.1.4
+ * Dependency on `pgbitmapfont>=0.1.7`, which no longer requires the obsolete `pathlib` PyPI backport. Together with the 0.1.3 change, no install of `pgconsole` pulls it in any more.
+ * `requires-python` raised to `>=3.10` to match what `pygame-ce` and `pgbitmapfont` actually support - the declared `>=3.7` was never installable.
+
 ## Future Releases
  - [ ] Update on pygame.org
- - [ ] Drop the transitive `pathlib` dependency once `pgbitmapfont` no longer requires it

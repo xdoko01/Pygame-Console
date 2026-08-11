@@ -1,2 +1,2 @@
 pygame-ce
-pgbitmapfont>=0.1.5
+pgbitmapfont>=0.1.7

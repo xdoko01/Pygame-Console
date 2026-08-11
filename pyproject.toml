@@ -1,16 +1,16 @@
 [project]
 name = "pgconsole"
-version = "0.1.3"
+version = "0.1.4"
 description = "A Python library to add full-featured console to any game."
 authors = [
     { name = "xdoko01" }
 ]
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.7"
+requires-python = ">=3.10"
 dependencies = [
     "pygame-ce",
-    "pgbitmapfont>=0.1.5"
+    "pgbitmapfont>=0.1.7"
 ]
 
 [project.urls]
